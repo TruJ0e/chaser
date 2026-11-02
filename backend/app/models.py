@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+Stage = Literal["nudge", "reminder", "final"]
+
+
+class Invoice(BaseModel):
+    id: str
+    number: str
+    customer_name: str
+    customer_email: str
+    amount: float = Field(ge=0)
+    currency: str = "USD"
+    status: str
+    due_date: str
+    days_overdue: int = Field(ge=0)
+    payment_link: str
+    history_note: str = ""
+
+
+class DraftRequest(BaseModel):
+    context: str | None = Field(default=None, max_length=1000)
+
+
+class DraftResult(BaseModel):
+    invoice_id: str
+    stage: Stage
+    subject: str
+    body: str
+    rationale: str
+    generated_by: Literal["mock", "nebius"]
+
+
+class ActivityEvent(BaseModel):
+    timestamp: datetime
+    event: Literal["draft_created"] = "draft_created"
+    invoice_id: str
+    invoice_number: str
+    stage: Stage
+    tone_rationale: str
+    generated_by: Literal["mock", "nebius"]
