@@ -9,6 +9,11 @@ from .config import Settings, settings
 from .mock_data import MOCK_INVOICES
 
 
+# Statuses that still carry an outstanding balance. PAYMENT_PENDING is excluded
+# because money is already in flight.
+OPEN_STATUSES = ("SENT", "UNPAID", "PARTIALLY_PAID")
+
+
 class PayPalError(RuntimeError):
     pass
 
@@ -29,6 +34,9 @@ class PayPalClient:
             if self.sandbox
             else "https://api-m.paypal.com"
         )
+        # TODO(creds): sandbox credentials are not issued yet. Put PAYPAL_CLIENT_ID and
+        # PAYPAL_CLIENT_SECRET in the repo-root .env (see .env.example); until then
+        # every call is served from mock_data.
         self.mock_mode = not (self.client_id and self.client_secret)
         self._transport = transport
         self._token: str | None = None
@@ -97,6 +105,33 @@ class PayPalClient:
         )
         return response.json()
 
+    async def search_invoices(
+        self,
+        statuses: tuple[str, ...] = OPEN_STATUSES,
+        *,
+        due_before: str | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> dict[str, Any]:
+        """Server-side filter for open invoices; `due_before` is an RFC 3339 date."""
+        if self.mock_mode:
+            items = [
+                invoice.model_dump()
+                for invoice in MOCK_INVOICES
+                if invoice.status in statuses
+            ]
+            return {"total_pages": 1, "total_items": len(items), "items": items, "links": [], "mock": True}
+        body: dict[str, Any] = {"status": list(statuses)[:5]}
+        if due_before:
+            body["due_date_range"] = {"start": "2000-01-01", "end": due_before}
+        response = await self._request(
+            "POST",
+            "/v2/invoicing/search-invoices",
+            params={"page": page, "page_size": page_size, "total_required": "true"},
+            json=body,
+        )
+        return response.json()
+
     async def get_invoice(self, invoice_id: str) -> dict[str, Any]:
         if self.mock_mode:
             for invoice in MOCK_INVOICES:
@@ -109,16 +144,27 @@ class PayPalClient:
         return response.json()
 
     async def send_reminder(
-        self, invoice_id: str, *, send_to_invoicer: bool = False
+        self,
+        invoice_id: str,
+        *,
+        subject: str | None = None,
+        note: str | None = None,
+        send_to_invoicer: bool = False,
     ) -> None:
-        """Send PayPal's system reminder. Intentionally unused until send approval exists."""
+        """Send PayPal's system reminder (204 on success).
+
+        Intentionally unused until send approval exists.
+        """
         if self.mock_mode:
             raise PayPalError("Reminder sending is disabled in mock mode")
+        body: dict[str, Any] = {
+            "send_to_recipient": True,
+            "send_to_invoicer": send_to_invoicer,
+        }
+        if subject:
+            body["subject"] = subject
+        if note:
+            body["note"] = note
         await self._request(
-            "POST",
-            f"/v2/invoicing/invoices/{invoice_id}/remind",
-            json={
-                "send_to_recipient": True,
-                "send_to_invoicer": send_to_invoicer,
-            },
+            "POST", f"/v2/invoicing/invoices/{invoice_id}/remind", json=body
         )

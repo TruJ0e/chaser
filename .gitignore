@@ -11,3 +11,4 @@ frontend/dist/
 dashboard-smoke.png
 draft-smoke.png
 .DS_Store
+.pytest-tmp/

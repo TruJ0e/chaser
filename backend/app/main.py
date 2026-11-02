@@ -11,7 +11,7 @@ from .ai_client import AIClient, AIClientError
 from .config import settings
 from .escalation import choose_stage
 from .models import ActivityEvent, DraftRequest, DraftResult, Invoice
-from .paypal_client import PayPalClient, PayPalError
+from .paypal_client import OPEN_STATUSES, PayPalClient, PayPalError
 
 
 app = FastAPI(title="Chaser API", version="0.1.0")
@@ -43,10 +43,10 @@ def _paypal_to_invoice(payload: dict[str, Any]) -> Invoice:
         overdue = max((date.today() - date.fromisoformat(due_date[:10])).days, 0)
     except ValueError:
         overdue = 0
-    amount = payload.get("amount", {})
-    links = payload.get("links", [])
-    payment_link = next(
-        (link.get("href", "") for link in links if link.get("rel") in {"payer-view", "pay"}),
+    # Chase the outstanding balance, not the invoice total (partial payments).
+    amount = payload.get("due_amount") or payload.get("amount", {})
+    payment_link = detail.get("metadata", {}).get("recipient_view_url") or next(
+        (link.get("href", "") for link in payload.get("links", []) if link.get("rel") in {"payer-view", "pay"}),
         "",
     )
     return Invoice(
@@ -65,12 +65,12 @@ def _paypal_to_invoice(payload: dict[str, Any]) -> Invoice:
 
 
 async def _invoices() -> list[Invoice]:
-    listing = await paypal.list_invoices()
+    listing = await paypal.search_invoices(due_before=date.today().isoformat())
     if paypal.mock_mode:
         return [Invoice.model_validate(item) for item in listing["items"]]
     invoices: list[Invoice] = []
     for summary in listing.get("items", []):
-        if summary.get("status") not in {"SENT", "PARTIALLY_PAID"}:
+        if summary.get("status") not in OPEN_STATUSES:
             continue
         details = await paypal.get_invoice(summary["id"])
         invoice = _paypal_to_invoice(details)

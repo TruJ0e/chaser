@@ -78,10 +78,13 @@ To get sandbox credentials, sign in to the [PayPal Developer Dashboard](https://
 |---|---|
 | OAuth client-credentials token | `POST /v1/oauth2/token` |
 | List invoices | `GET /v2/invoicing/invoices` |
+| Search open invoices (used by `/api/invoices`) | `POST /v2/invoicing/search-invoices` with body `{"status": ["SENT","UNPAID","PARTIALLY_PAID"], "due_date_range": {"start": ..., "end": <today>}}` |
 | Get invoice details | `GET /v2/invoicing/invoices/{invoice_id}` |
-| Send PayPal reminder | `POST /v2/invoicing/invoices/{invoice_id}/remind` |
+| Send PayPal reminder | `POST /v2/invoicing/invoices/{invoice_id}/remind` with body `{subject, note, send_to_recipient, send_to_invoicer, additional_recipients}`; returns 204 |
 
 Sandbox base URL: `https://api-m.sandbox.paypal.com`. Live base URL: `https://api-m.paypal.com`.
+
+Each open invoice is then fetched in full. The normalizer chases `due_amount` (the outstanding balance after partial payments, falling back to `amount`) and uses `detail.metadata.recipient_view_url` as the one-click payment link.
 
 The list call uses v2 parameters `page`, `page_size`, `total_required`, and `fields`. References: [Invoices v2 overview](https://developer.paypal.com/api/invoicing/v2/), [list invoices](https://developer.paypal.com/api/invoicing/v2/invoices-list/), [get invoice](https://developer.paypal.com/api/invoicing/v2/invoices-get/), [send reminder](https://developer.paypal.com/api/invoicing/v2/invoices-remind/), and [REST authentication](https://developer.paypal.com/api/rest/authentication/).
 
@@ -108,6 +111,7 @@ The rationale includes the invoice age, amount, and available relationship note.
 
 ```bash
 python -m pytest backend/tests
+# If Windows denies access to the pytest temp dir, add: --basetemp .pytest-tmp
 cd frontend
 npm run build
 ```
