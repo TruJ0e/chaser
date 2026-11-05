@@ -2,7 +2,7 @@
 
 Chaser is an explainable AI collections agent for small businesses. It finds unpaid invoices, selects a respectful escalation stage, drafts a personalized follow-up with a one-click payment link, and records why it chose that tone at that moment.
 
-This hackathon prototype is intentionally **draft-only**: it never sends email or calls PayPal's reminder endpoint from the web API. It runs end-to-end with realistic mock data and mock AI when no credentials are present.
+This hackathon prototype is intentionally **mock-first and draft-only**: the demo makes no live PayPal sandbox calls, never sends email, and never calls PayPal's reminder endpoint from the web API. No PayPal Developer account is required. It runs end-to-end with realistic mock invoices, recovered payments, payment links, and deterministic draft generation when credentials are absent.
 
 ## What is included
 
@@ -11,7 +11,8 @@ This hackathon prototype is intentionally **draft-only**: it never sends email o
 - Three-stage escalation ladder: friendly nudge, firm reminder, final notice.
 - Amount-aware risk rules that can accelerate high-value invoices.
 - Append-only JSONL audit log for every generated draft and its rationale.
-- PayPal Invoicing API v2 client for list, details, and reminder operations.
+- A swappable `PayPalClient` interface with network-free mock and REST adapters.
+- Mock recovered-revenue metrics and aging buckets served to the dashboard.
 
 ## Quick start (mock mode — no credentials needed)
 
@@ -51,7 +52,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Select **Create draft** on any invoice to exercise the escalation ladder and add an audit event.
+Open `http://localhost:5173`. Select **Create draft** on invoices in each age band to exercise nudge, reminder, and final-notice copy. Each draft records its rationale in the activity feed. **Pay now** opens a local mock PayPal payer view in one click; it does not contact PayPal or collect payment details.
+
+The expected default health response includes `"paypal_mode": "mock"`. Do not add PayPal credentials when running the hackathon demo.
 
 ## Configuration
 
@@ -68,7 +71,16 @@ All configuration belongs in the repository-root `.env` file (ignored by git). S
 | `CHASER_ACTIVITY_LOG` | JSONL audit log path | `backend/data/activity.jsonl` |
 | `VITE_API_URL` | Backend URL used at frontend build/dev time | `http://localhost:8000` |
 
-To get sandbox credentials, sign in to the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), choose **Apps & Credentials → Sandbox**, create or open a REST app, and copy its Client ID and Secret into `.env`. Do not put credentials in `frontend/`, source code, or commits.
+## PayPal integration seam
+
+The application depends only on the `PayPalClient` protocol in `backend/app/paypal_client.py`. `create_paypal_client()` chooses one adapter at startup:
+
+- With blank `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, it returns `MockPayPalClient`. This is the supported hackathon-demo path and performs no network calls.
+- When both values are present, it returns `PayPalRESTClient`. The API routes and React dashboard do not need to change.
+
+To switch later to a live PayPal **sandbox**, sign in to the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), choose **Apps & Credentials → Sandbox**, create or open a REST app, place its Client ID and Secret in the repository-root `.env`, keep `PAYPAL_SANDBOX=true`, and restart the API. Confirm `/api/health` reports `"paypal_mode": "sandbox"`. Do not put credentials in `frontend/`, source code, or commits.
+
+The REST adapter is implemented and contract-tested with an in-process HTTP mock; it has not been exercised against a real PayPal sandbox account under the current mock-first decision.
 
 ## PayPal API contract
 
@@ -104,8 +116,10 @@ The rationale includes the invoice age, amount, and available relationship note.
 
 - `GET /api/health` — active integration modes and sending safety state.
 - `GET /api/invoices` — normalized overdue invoices.
+- `GET /api/dashboard` — outstanding, aging-bucket, critical-account, and recovered-revenue metrics.
 - `POST /api/invoices/{invoice_id}/draft` — generate and audit a draft.
 - `GET /api/activity` — newest audit events first.
+- `GET /mock/pay/{invoice_id}` — local mock payer view; available only in mock mode.
 
 ## Verification
 

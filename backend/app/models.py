@@ -44,3 +44,18 @@ class ActivityEvent(BaseModel):
     stage: Stage
     tone_rationale: str
     generated_by: Literal["mock", "nebius"]
+
+
+class AgingBucket(BaseModel):
+    key: Literal["current", "watch", "critical"]
+    label: str
+    invoice_count: int = Field(ge=0)
+    amount: float = Field(ge=0)
+
+
+class DashboardMetrics(BaseModel):
+    total_outstanding: float = Field(ge=0)
+    average_days_overdue: int = Field(ge=0)
+    critical_accounts: int = Field(ge=0)
+    recovered_revenue: float = Field(ge=0)
+    aging_buckets: list[AgingBucket]

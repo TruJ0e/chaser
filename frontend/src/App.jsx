@@ -20,6 +20,7 @@ function App() {
   const [invoices, setInvoices] = useState([]);
   const [activity, setActivity] = useState([]);
   const [health, setHealth] = useState(null);
+  const [metrics, setMetrics] = useState(null);
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);
   const [drafting, setDrafting] = useState("");
@@ -27,17 +28,19 @@ function App() {
 
   const load = useCallback(async () => {
     try {
-      const [invoiceResponse, activityResponse, healthResponse] = await Promise.all([
+      const [invoiceResponse, activityResponse, healthResponse, metricsResponse] = await Promise.all([
         fetch(`${API_URL}/api/invoices`),
         fetch(`${API_URL}/api/activity`),
         fetch(`${API_URL}/api/health`),
+        fetch(`${API_URL}/api/dashboard`),
       ]);
-      if (!invoiceResponse.ok || !activityResponse.ok || !healthResponse.ok) {
+      if (!invoiceResponse.ok || !activityResponse.ok || !healthResponse.ok || !metricsResponse.ok) {
         throw new Error("The API returned an error.");
       }
       setInvoices(await invoiceResponse.json());
       setActivity(await activityResponse.json());
       setHealth(await healthResponse.json());
+      setMetrics(await metricsResponse.json());
       setError("");
     } catch (requestError) {
       setError(`${requestError.message} Is the backend running on ${API_URL}?`);
@@ -85,6 +88,15 @@ function App() {
       cellRenderer: ({ value }) => <span className={`age age-${value >= 45 ? "late" : value >= 15 ? "mid" : "new"}`}>{value} days</span>,
     },
     {
+      headerName: "Payment",
+      sortable: false,
+      filter: false,
+      minWidth: 105,
+      cellRenderer: ({ data }) => (
+        <a className="pay-link" href={data.payment_link} target="_blank" rel="noreferrer">Pay now ↗</a>
+      ),
+    },
+    {
       headerName: "Next action",
       sortable: false,
       filter: false,
@@ -97,7 +109,7 @@ function App() {
     },
   ], [createDraft, drafting]);
 
-  const totals = useMemo(() => {
+  const fallbackTotals = useMemo(() => {
     const outstanding = invoices.reduce((sum, item) => sum + item.amount, 0);
     return {
       outstanding,
@@ -130,10 +142,10 @@ function App() {
         {error && <div className="error-banner">{error}</div>}
 
         <section id="overview" className="metrics">
-          <Metric label="TOTAL OUTSTANDING" value={currency(totals.outstanding)} detail={`Across ${invoices.length} open invoices`} accent="ink" />
-          <Metric label="AVG. DAYS OVERDUE" value={`${totals.averageAge} days`} detail="Portfolio average" />
-          <Metric label="CRITICAL ACCOUNTS" value={totals.critical} detail="45+ days overdue" accent="coral" />
-          <Metric label="RECOVERED THIS MONTH" value="$0" detail="Connect payment events next" accent="mint" />
+          <Metric label="TOTAL OUTSTANDING" value={currency(metrics?.total_outstanding ?? fallbackTotals.outstanding)} detail={`Across ${invoices.length} open invoices`} accent="ink" />
+          <Metric label="AVG. DAYS OVERDUE" value={`${metrics?.average_days_overdue ?? fallbackTotals.averageAge} days`} detail="Portfolio average" />
+          <Metric label="CRITICAL ACCOUNTS" value={metrics?.critical_accounts ?? fallbackTotals.critical} detail="45+ days overdue" accent="coral" />
+          <Metric label="RECOVERED THIS MONTH" value={currency(metrics?.recovered_revenue ?? 0)} detail="Paid invoice value" accent="mint" />
         </section>
 
         <section id="invoices" className="panel invoice-panel">
@@ -163,10 +175,10 @@ function App() {
           </article>
           <article className="panel aging-panel">
             <p className="eyebrow">AGING SNAPSHOT</p><h2>Risk distribution</h2>
-            {[{ label: "1–14 days", test: (d) => d < 15, cls: "fresh" }, { label: "15–44 days", test: (d) => d >= 15 && d < 45, cls: "watch" }, { label: "45+ days", test: (d) => d >= 45, cls: "risk" }].map((bucket) => {
-              const amount = invoices.filter((item) => bucket.test(item.days_overdue)).reduce((sum, item) => sum + item.amount, 0);
-              const width = totals.outstanding ? Math.max(5, amount / totals.outstanding * 100) : 0;
-              return <div className="bucket" key={bucket.label}><div><span>{bucket.label}</span><strong>{currency(amount)}</strong></div><div className="bar"><i className={bucket.cls} style={{ width: `${width}%` }} /></div></div>;
+            {(metrics?.aging_buckets || []).map((bucket) => {
+              const width = metrics.total_outstanding ? Math.max(5, bucket.amount / metrics.total_outstanding * 100) : 0;
+              const cls = bucket.key === "current" ? "fresh" : bucket.key === "watch" ? "watch" : "risk";
+              return <div className="bucket" key={bucket.key}><div><span>{bucket.label} · {bucket.invoice_count}</span><strong>{currency(bucket.amount)}</strong></div><div className="bar"><i className={cls} style={{ width: `${width}%` }} /></div></div>;
             })}
           </article>
         </section>
@@ -179,7 +191,7 @@ function App() {
           <h2>{draft.subject}</h2>
           <pre>{draft.body}</pre>
           <div className="rationale"><strong>Why this tone, why now</strong><p>{draft.rationale}</p></div>
-          <footer><span>Generated by {draft.generated_by} · not sent</span><button onClick={() => navigator.clipboard?.writeText(draft.body)}>Copy draft</button></footer>
+          <footer><span>Generated by {draft.generated_by} · not sent</span><div className="modal-actions"><button className="secondary" onClick={() => navigator.clipboard?.writeText(draft.body)}>Copy draft</button><a href={draft.invoice.payment_link} target="_blank" rel="noreferrer">Open PayPal payment ↗</a></div></footer>
         </article>
       </div>}
     </div>

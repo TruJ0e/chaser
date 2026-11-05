@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 
 from app.config import Settings
-from app.paypal_client import PayPalClient
+from app.paypal_client import MockPayPalClient, PayPalRESTClient, create_paypal_client
 
 
 def test_verified_v2_paths_and_oauth_flow():
@@ -29,7 +29,7 @@ def test_verified_v2_paths_and_oauth_flow():
         paypal_sandbox=True,
         activity_log=Path("unused.jsonl"),
     )
-    client = PayPalClient(config, transport=httpx.MockTransport(handler))
+    client = PayPalRESTClient(config, transport=httpx.MockTransport(handler))
 
     async def exercise() -> None:
         await client.list_invoices(page=2, page_size=50)
@@ -46,6 +46,23 @@ def test_verified_v2_paths_and_oauth_flow():
     assert seen[3].method == "POST"
 
 
+def test_factory_keeps_mock_and_rest_adapters_swappable():
+    mock = create_paypal_client(Settings(activity_log=Path("unused.jsonl")))
+    assert isinstance(mock, MockPayPalClient)
+    assert mock.mode == "mock"
+
+    live = create_paypal_client(
+        Settings(
+            paypal_client_id="client-id",
+            paypal_client_secret="client-secret",
+            paypal_sandbox=True,
+            activity_log=Path("unused.jsonl"),
+        )
+    )
+    assert isinstance(live, PayPalRESTClient)
+    assert live.mode == "sandbox"
+
+
 def test_search_filters_open_statuses_and_remind_body():
     seen: list[httpx.Request] = []
 
@@ -53,19 +70,21 @@ def test_search_filters_open_statuses_and_remind_body():
         seen.append(request)
         if request.url.path == "/v1/oauth2/token":
             return httpx.Response(200, json={"access_token": "test-token", "expires_in": 3600})
-        if request.url.path == "/v2/invoicing/search-invoices" and request.method == "POST":
+        if request.url.path == "/v2/invoicing/search-invoices":
             return httpx.Response(200, json={"items": []})
         if request.url.path.endswith("/remind"):
             return httpx.Response(204)
         return httpx.Response(404)
 
-    config = Settings(
-        paypal_client_id="client-id",
-        paypal_client_secret="client-secret",
-        paypal_sandbox=True,
-        activity_log=Path("unused.jsonl"),
+    client = PayPalRESTClient(
+        Settings(
+            paypal_client_id="client-id",
+            paypal_client_secret="client-secret",
+            paypal_sandbox=True,
+            activity_log=Path("unused.jsonl"),
+        ),
+        transport=httpx.MockTransport(handler),
     )
-    client = PayPalClient(config, transport=httpx.MockTransport(handler))
 
     async def exercise() -> None:
         await client.search_invoices(due_before="2026-11-02")
@@ -77,7 +96,12 @@ def test_search_filters_open_statuses_and_remind_body():
     assert search["status"] == ["SENT", "UNPAID", "PARTIALLY_PAID"]
     assert search["due_date_range"]["end"] == "2026-11-02"
     remind = json.loads(seen[2].content)
-    assert remind == {"send_to_recipient": True, "send_to_invoicer": False, "subject": "Reminder", "note": "Please pay"}
+    assert remind == {
+        "send_to_recipient": True,
+        "send_to_invoicer": False,
+        "subject": "Reminder",
+        "note": "Please pay",
+    }
 
 
 def test_normalizer_uses_due_amount_and_recipient_view_url():
@@ -89,9 +113,16 @@ def test_normalizer_uses_due_amount_and_recipient_view_url():
         "detail": {
             "invoice_number": "0042",
             "payment_term": {"due_date": "2000-01-01"},
-            "metadata": {"recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-ABCD"},
+            "metadata": {
+                "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-ABCD"
+            },
         },
-        "primary_recipients": [{"billing_info": {"business_name": "Acme", "email_address": "ap@acme.example"}}],
+        "primary_recipients": [{
+            "billing_info": {
+                "business_name": "Acme",
+                "email_address": "ap@acme.example",
+            }
+        }],
         "amount": {"currency_code": "USD", "value": "100.00"},
         "due_amount": {"currency_code": "USD", "value": "40.00"},
     })
