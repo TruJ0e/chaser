@@ -2,16 +2,19 @@
 
 Chaser is an explainable AI collections agent for small businesses. It finds unpaid invoices, selects a respectful escalation stage, drafts a personalized follow-up with a one-click payment link, and records why it chose that tone at that moment.
 
-This hackathon prototype is intentionally **mock-first and draft-only**: the demo makes no live PayPal sandbox calls, never sends email, and never calls PayPal's reminder endpoint from the web API. No PayPal Developer account is required. It runs end-to-end with realistic mock invoices, recovered payments, payment links, and deterministic draft generation when credentials are absent.
+This hackathon prototype is intentionally **mock-first and draft-only**: the demo makes no live PayPal sandbox calls, never sends email or SMS, and never calls PayPal's reminder endpoint from the web API. No PayPal Developer or SMS-provider account is required. It runs end-to-end with realistic mock invoices, recovered payments, payment links, and deterministic email/text draft generation when credentials are absent.
 
 ## What is included
 
 - FastAPI backend with mock-first PayPal and OpenAI-compatible AI clients.
 - React dashboard with a real [AG Grid Community](https://www.ag-grid.com/react-data-grid/) invoice table.
 - Three-stage escalation ladder: friendly nudge, firm reminder, final notice.
+- Agent-selected email, text, or combined outreach with an auditable channel rationale.
+- Single-segment text drafts (under 160 characters) containing the amount and payment link.
 - Amount-aware risk rules that can accelerate high-value invoices.
 - Append-only JSONL audit log for every generated draft and its rationale.
 - A swappable `PayPalClient` interface with network-free mock and REST adapters.
+- A swappable `SMSClient` interface whose mock adapter records and logs texts without a network call.
 - Mock recovered-revenue metrics and aging buckets served to the dashboard.
 
 ## Quick start (mock mode — no credentials needed)
@@ -52,9 +55,15 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Select **Create draft** on invoices in each age band to exercise nudge, reminder, and final-notice copy. Each draft records its rationale in the activity feed. **Pay now** opens a local mock PayPal payer view in one click; it does not contact PayPal or collect payment details.
+Open `http://localhost:5173`. Select **Create draft** on invoices in each age band to exercise nudge, reminder, and final-notice email and text copy. Each draft records its tone rationale, selected channel(s), and channel rationale in the activity feed. The **SMS Mock** badge confirms texts are recorded locally instead of sent. **Pay now** opens a local mock PayPal payer view in one click; it does not contact PayPal or collect payment details.
 
-The expected default health response includes `"paypal_mode": "mock"`. Do not add PayPal credentials when running the hackathon demo.
+The expected default health response includes `"paypal_mode": "mock"` and `"sms_mode": "mock"`. Do not add PayPal credentials when running the hackathon demo.
+
+## SMS integration seam
+
+The application depends only on the `SMSClient` protocol in `backend/app/sms_client.py`. `create_sms_client()` currently always returns `MockSMSClient`; its `send_text()` method stores the recipient/body in memory and emits a `chaser.sms` log entry. It has no HTTP client, credentials, Twilio dependency, or network path.
+
+A real provider can be added later without changing the draft route, channel policy, activity log, or dashboard: implement an adapter such as `TwilioSMSClient` with the same async `send_text(to, body)` method, add provider credentials to backend-only configuration, and select that adapter in `create_sms_client()`. Before enabling it, add explicit approval, consent/opt-out handling, idempotency, rate limits, delivery-status handling, and provider contract tests. The hackathon demo must remain on `MockSMSClient`.
 
 ## Configuration
 
@@ -110,14 +119,14 @@ The transparent policy is in `backend/app/escalation.py`:
 - **Reminder:** 15–44 days overdue, or 7+ days when the balance is at least USD 5,000.
 - **Final:** 45+ days overdue, or 30+ days when the balance is at least USD 10,000.
 
-The rationale includes the invoice age, amount, and available relationship note. Every successful draft appends one JSON object to the activity log. Existing lines are never rewritten by the application.
+The rationale includes the invoice age, amount, and available relationship note. Every successful draft appends one JSON object to the activity log, including the chosen channels and why they were selected. Existing lines are never rewritten by the application.
 
 ## API
 
 - `GET /api/health` — active integration modes and sending safety state.
 - `GET /api/invoices` — normalized overdue invoices.
 - `GET /api/dashboard` — outstanding, aging-bucket, critical-account, and recovered-revenue metrics.
-- `POST /api/invoices/{invoice_id}/draft` — generate and audit a draft.
+- `POST /api/invoices/{invoice_id}/draft` — generate email/text copy, select channels, record mock texts, and audit the draft.
 - `GET /api/activity` — newest audit events first.
 - `GET /mock/pay/{invoice_id}` — local mock payer view; available only in mock mode.
 
@@ -132,7 +141,7 @@ npm run build
 
 ## Roadmap / TODO
 
-- Add an approval-gated email provider and connect sending only after review.
+- Add approval-gated email and SMS providers only after consent, safety, and delivery controls are reviewed.
 - Reconcile PayPal payment webhooks to recovered-revenue metrics.
 - Store relationship history and audit events in a production database.
 - Add pagination/concurrency limits for accounts with large invoice volumes.

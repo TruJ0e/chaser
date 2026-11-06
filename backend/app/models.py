@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 Stage = Literal["nudge", "reminder", "final"]
+Channel = Literal["email", "text"]
 
 
 class Invoice(BaseModel):
@@ -14,6 +15,7 @@ class Invoice(BaseModel):
     number: str
     customer_name: str
     customer_email: str
+    customer_phone: str | None = None
     amount: float = Field(ge=0)
     currency: str = "USD"
     status: str
@@ -32,7 +34,10 @@ class DraftResult(BaseModel):
     stage: Stage
     subject: str
     body: str
+    text_body: str
+    channels: list[Channel]
     rationale: str
+    channel_rationale: str
     generated_by: Literal["mock", "nebius"]
 
 
@@ -42,7 +47,9 @@ class ActivityEvent(BaseModel):
     invoice_id: str
     invoice_number: str
     stage: Stage
+    channels: list[Channel]
     tone_rationale: str
+    channel_rationale: str
     generated_by: Literal["mock", "nebius"]
 
 

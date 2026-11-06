@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from .activity_log import ActivityLog
 from .ai_client import AIClient, AIClientError
 from .config import settings
-from .escalation import choose_stage
+from .escalation import choose_channels, choose_stage, render_text
 from .models import (
     ActivityEvent,
     AgingBucket,
@@ -20,6 +20,7 @@ from .models import (
     Invoice,
 )
 from .paypal_client import OPEN_STATUSES, PayPalError, create_paypal_client
+from .sms_client import create_sms_client
 
 
 app = FastAPI(title="Chaser API", version="0.1.0")
@@ -34,6 +35,7 @@ app.add_middleware(
 paypal = create_paypal_client()
 ai = AIClient()
 activity = ActivityLog(settings.activity_log)
+sms = create_sms_client()
 
 
 def _paypal_to_invoice(payload: dict[str, Any]) -> Invoice:
@@ -92,6 +94,7 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "paypal_mode": paypal.mode,
         "ai_mode": "mock" if ai.mock_mode else "nebius",
+        "sms_mode": sms.mode,
         "sending_enabled": False,
     }
 
@@ -163,6 +166,8 @@ async def create_draft(invoice_id: str, request: DraftRequest) -> DraftResult:
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     stage, rationale = choose_stage(invoice)
+    channels, channel_rationale = choose_channels(invoice, stage)
+    text_body = render_text(invoice, stage)
     try:
         subject, body, generated_by = await ai.draft(invoice, stage, rationale, request.context)
     except AIClientError as exc:
@@ -172,16 +177,23 @@ async def create_draft(invoice_id: str, request: DraftRequest) -> DraftResult:
         stage=stage,
         subject=subject,
         body=body,
+        text_body=text_body,
+        channels=channels,
         rationale=rationale,
+        channel_rationale=channel_rationale,
         generated_by=generated_by,
     )
+    if "text" in channels and invoice.customer_phone:
+        await sms.send_text(invoice.customer_phone, text_body)
     activity.append(
         ActivityEvent(
             timestamp=datetime.now(UTC),
             invoice_id=invoice.id,
             invoice_number=invoice.number,
             stage=stage,
+            channels=channels,
             tone_rationale=rationale,
+            channel_rationale=channel_rationale,
             generated_by=generated_by,
         )
     )
