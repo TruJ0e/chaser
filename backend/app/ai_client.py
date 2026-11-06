@@ -28,10 +28,16 @@ class AIClient:
             return subject, body, "mock"
 
         prompt = (
-            "Draft a concise collections email. Return exactly two sections: "
-            "SUBJECT: one line, then BODY: plain text. Do not threaten, invent fees, "
-            "or claim legal action. "
+            f"Write as {invoice.business_name}, not as a collections service. Draft a concise "
+            "payment follow-up that sounds like a real continuation of this customer relationship, "
+            "never a generic template. Lead with who the business is and the specific work completed, "
+            "then naturally include the invoice number, amount, days overdue, and payment link. "
+            "Use the relationship history to make the note personal without exposing internal labels. "
+            f"Sign as {invoice.business_name}. Never use 'Chaser Accounts', 'our records show', or "
+            "'final scheduled notice'. Return exactly two sections: SUBJECT: one line, then BODY: "
+            "plain text. Do not threaten, invent fees, or claim legal action. "
             f"Stage: {stage}. Rationale: {rationale}. Invoice: {invoice.number}; "
+            f"business: {invoice.business_name}; work completed: {invoice.work_reference}; "
             f"customer: {invoice.customer_name}; amount: {invoice.currency} {invoice.amount:.2f}; "
             f"days overdue: {invoice.days_overdue}; payment link: {invoice.payment_link}. "
             f"Relationship history: {invoice.history_note}. Additional context: {context or 'none'}."
@@ -63,17 +69,21 @@ class AIClient:
     @staticmethod
     def _mock_draft(invoice: Invoice, stage: Stage) -> tuple[str, str]:
         amount = f"{invoice.currency} {invoice.amount:,.2f}"
+        relationship_open = (
+            f"Hi {invoice.customer_name},\n\n{invoice.business_name} here, following up on "
+            f"{invoice.work_reference}. {invoice.history_note}"
+        )
         if stage == "nudge":
             return (
-                f"Quick note about invoice {invoice.number}",
-                f"Hi {invoice.customer_name},\n\nJust a friendly note that invoice {invoice.number} for {amount} is now {invoice.days_overdue} days past due. If it has already been handled, thank you and please disregard this message. Otherwise, you can review and pay it here: {invoice.payment_link}\n\nBest,\nChaser Accounts",
+                f"A quick note on {invoice.work_reference} · {invoice.number}",
+                f"{relationship_open}\n\nInvoice {invoice.number} for {amount} is {invoice.days_overdue} days overdue. If you have already handled it, thank you; otherwise, you can review and pay it here: {invoice.payment_link}\n\nBest,\n{invoice.business_name}",
             )
         if stage == "reminder":
             return (
-                f"Payment reminder: invoice {invoice.number}",
-                f"Hi {invoice.customer_name},\n\nOur records show invoice {invoice.number} for {amount} remains unpaid {invoice.days_overdue} days after its due date. Please arrange payment or let us know if anything is holding it up. Payment details: {invoice.payment_link}\n\nThank you,\nChaser Accounts",
+                f"Checking in on {invoice.work_reference} · {invoice.number}",
+                f"{relationship_open}\n\nInvoice {invoice.number} for {amount} is now {invoice.days_overdue} days overdue. Please take care of it here, or reply if there is anything we should sort out together: {invoice.payment_link}\n\nThank you,\n{invoice.business_name}",
             )
         return (
-            f"Final notice: invoice {invoice.number} is overdue",
-            f"Hi {invoice.customer_name},\n\nThis is our final scheduled notice that invoice {invoice.number} for {amount} is {invoice.days_overdue} days overdue. Please make payment promptly or contact us today to discuss the account. Payment details: {invoice.payment_link}\n\nRegards,\nChaser Accounts",
+            f"Please reply about {invoice.work_reference} · {invoice.number}",
+            f"{relationship_open}\n\nInvoice {invoice.number} for {amount} is {invoice.days_overdue} days overdue, and we need to close the loop. Please pay it here or reply today so we can understand what is holding it up: {invoice.payment_link}\n\nRegards,\n{invoice.business_name}",
         )

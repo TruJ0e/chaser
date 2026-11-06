@@ -20,6 +20,7 @@ def env_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
+    business_name: str = os.getenv("CHASER_BUSINESS_NAME", "TruJoe Digital")
     paypal_client_id: str = os.getenv("PAYPAL_CLIENT_ID", "")
     paypal_client_secret: str = os.getenv("PAYPAL_CLIENT_SECRET", "")
     paypal_sandbox: bool = env_bool("PAYPAL_SANDBOX", True)

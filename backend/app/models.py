@@ -13,9 +13,11 @@ Channel = Literal["email", "text"]
 class Invoice(BaseModel):
     id: str
     number: str
+    business_name: str
     customer_name: str
     customer_email: str
     customer_phone: str | None = None
+    work_reference: str
     amount: float = Field(ge=0)
     currency: str = "USD"
     status: str

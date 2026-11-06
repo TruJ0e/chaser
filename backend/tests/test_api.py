@@ -57,6 +57,12 @@ def test_mock_flow_covers_all_escalation_stages_and_payment_links(tmp_path: Path
         assert draft.json()["stage"] == expected_stage
         assert invoice["payment_link"] in draft.json()["body"]
         assert invoice["payment_link"] in draft.json()["text_body"]
+        assert invoice["business_name"] in draft.json()["body"]
+        assert invoice["business_name"] in draft.json()["text_body"]
+        assert invoice["work_reference"] in draft.json()["body"]
+        assert invoice["work_reference"] in draft.json()["text_body"]
+        assert invoice["number"] in draft.json()["body"]
+        assert invoice["number"] in draft.json()["text_body"]
         assert f"{invoice['currency']} {invoice['amount']:,.2f}" in draft.json()["text_body"]
         assert len(draft.json()["text_body"]) < 160
         assert draft.json()["channels"]

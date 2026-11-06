@@ -112,11 +112,13 @@ def test_normalizer_uses_due_amount_and_recipient_view_url():
         "status": "PARTIALLY_PAID",
         "detail": {
             "invoice_number": "0042",
+            "reference": "November support retainer",
             "payment_term": {"due_date": "2000-01-01"},
             "metadata": {
                 "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#INV2-ABCD"
             },
         },
+        "invoicer": {"business_name": "TruJoe Digital"},
         "primary_recipients": [{
             "billing_info": {
                 "business_name": "Acme",
@@ -127,5 +129,7 @@ def test_normalizer_uses_due_amount_and_recipient_view_url():
         "due_amount": {"currency_code": "USD", "value": "40.00"},
     })
     assert invoice.amount == 40.0
+    assert invoice.business_name == "TruJoe Digital"
+    assert invoice.work_reference == "November support retainer"
     assert invoice.payment_link.endswith("#INV2-ABCD")
     assert invoice.days_overdue > 0

@@ -44,12 +44,12 @@ def choose_channels(invoice: Invoice, stage: Stage) -> tuple[list[Channel], str]
 
 
 def render_text(invoice: Invoice, stage: Stage) -> str:
-    """Render a single-segment SMS with amount and direct payment link."""
+    """Render relationship-led, single-segment SMS copy for each chase stage."""
     amount = f"{invoice.currency} {invoice.amount:,.2f}"
     copy = {
-        "nudge": f"Friendly reminder: {amount} is due. Pay here: {invoice.payment_link}",
-        "reminder": f"Payment reminder: {amount} remains overdue. Pay here: {invoice.payment_link}",
-        "final": f"Final notice: {amount} remains overdue. Please pay or contact us today: {invoice.payment_link}",
+        "nudge": f"{invoice.business_name}: {invoice.work_reference} — {invoice.number}, {amount}, {invoice.days_overdue}d overdue. Pay: {invoice.payment_link}",
+        "reminder": f"{invoice.business_name} checking in on {invoice.work_reference}: {invoice.number}, {amount}, {invoice.days_overdue}d overdue. Pay: {invoice.payment_link}",
+        "final": f"{invoice.business_name}: please reply about {invoice.work_reference}. {invoice.number}, {amount}, {invoice.days_overdue}d overdue. Pay: {invoice.payment_link}",
     }[stage]
     if len(copy) > 160:
         raise ValueError("SMS draft exceeds 160 characters; use a shorter payment link")

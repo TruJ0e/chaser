@@ -4,6 +4,8 @@ Chaser is an explainable AI collections agent for small businesses. It finds unp
 
 This hackathon prototype is intentionally **mock-first and draft-only**: the demo makes no live PayPal sandbox calls, never sends email or SMS, and never calls PayPal's reminder endpoint from the web API. No PayPal Developer or SMS-provider account is required. It runs end-to-end with realistic mock invoices, recovered payments, payment links, and deterministic email/text draft generation when credentials are absent.
 
+Wording principle: drafts carry the relationship—the business, the work, and the customer history—not a collections-template voice.
+
 ## What is included
 
 - FastAPI backend with mock-first PayPal and OpenAI-compatible AI clients.
@@ -71,6 +73,7 @@ All configuration belongs in the repository-root `.env` file (ignored by git). S
 
 | Variable | Purpose | Mock behavior |
 |---|---|---|
+| `CHASER_BUSINESS_NAME` | Business name used when live invoice data omits it | `TruJoe Digital` |
 | `PAYPAL_CLIENT_ID` | REST app client ID | Missing ID or secret enables mock invoices |
 | `PAYPAL_CLIENT_SECRET` | REST app secret | Never expose this to the frontend |
 | `PAYPAL_SANDBOX` | `true` uses sandbox; `false` uses live | Defaults to `true` |

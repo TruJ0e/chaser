@@ -54,6 +54,17 @@ def _paypal_to_invoice(payload: dict[str, Any]) -> Invoice:
     except ValueError:
         overdue = 0
     amount = payload.get("due_amount") or payload.get("amount", {})
+    invoicer = payload.get("invoicer", {})
+    invoicer_name = invoicer.get("name", {})
+    business_name = (
+        invoicer.get("business_name")
+        or invoicer_name.get("full_name")
+        or settings.business_name
+    )
+    items = payload.get("items", [])
+    work_reference = detail.get("reference") or ", ".join(
+        item.get("name") or item.get("description", "") for item in items
+    ).strip(", ") or "the work listed on this invoice"
     payment_link = detail.get("metadata", {}).get("recipient_view_url") or next(
         (link.get("href", "") for link in payload.get("links", []) if link.get("rel") in {"payer-view", "pay"}),
         "",
@@ -61,8 +72,10 @@ def _paypal_to_invoice(payload: dict[str, Any]) -> Invoice:
     return Invoice(
         id=payload["id"],
         number=detail.get("invoice_number", payload["id"]),
+        business_name=business_name,
         customer_name=customer_name,
         customer_email=billing.get("email_address", ""),
+        work_reference=work_reference,
         amount=float(amount.get("value", 0)),
         currency=amount.get("currency_code", "USD"),
         status=payload.get("status", "UNKNOWN"),
